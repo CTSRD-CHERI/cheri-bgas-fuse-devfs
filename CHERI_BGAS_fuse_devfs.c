@@ -46,21 +46,75 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #include <BlueUnixBridges.h>
 #include <BlueAXI4UnixBridges.h>
 
-#define DBG_FILE "debug_unit"
-#define DBG_BASE_ADDR 0x00000000
-#define DBG_RANGE 0x00001000
-
-#define UART_FILE "uart"
-#define UART_BASE_ADDR 0x00003000
-#define UART_RANGE 0x00001000
-
-#define VIRTDEV_FILE "virtual_device"
-#define VIRTDEV_BASE_ADDR 0x00008000
-#define VIRTDEV_RANGE 0x00004000
+// list helpers
+////////////////////////////////////////////////////////////////////////////////
+typedef struct node { void* payload; struct node* next; } node_t;
+typedef node_t* list_t;
+static void map_ (void (*f) (void*), list_t xs) {
+  if (xs != NULL) { f (xs->payload); map_ (f, xs->next); }
+}
+static void* find_ (bool (*pred) (void*), const list_t xs) {
+  if (xs == NULL) return NULL;
+  else if (pred (xs->payload)) return xs->payload;
+  else return find_ (pred, xs->next);
+}
+// H2F LW devices
+////////////////////////////////////////////////////////////////////////////////
+typedef struct h2f_lw_dev {
+  const char* name;
+  const uint32_t base_addr;
+  const uint32_t range;
+} h2f_lw_dev_t;
+static const list_t h2f_lw_dev_list =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "debug_unit"
+                                       , .base_addr = 0x00000000
+                                       , .range     = 0x00001000 }
+          , .next =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "irqs"
+                                       , .base_addr = 0x00001000
+                                       , .range     = 0x00001000 }
+          , .next =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "misc"
+                                       , .base_addr = 0x00002000
+                                       , .range     = 0x00001000 }
+          , .next =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "uart0"
+                                       , .base_addr = 0x00003000
+                                       , .range     = 0x00001000 }
+          , .next =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "uart1"
+                                       , .base_addr = 0x00004000
+                                       , .range     = 0x00001000 }
+          , .next =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "h2f_addr_ctrl"
+                                       , .base_addr = 0x00005000
+                                       , .range     = 0x00001000 }
+          , .next =
+&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "virtual_device"
+                                       , .base_addr = 0x00008000
+                                       , .range     = 0x00004000 }
+          , .next = NULL }}}}}}};
+static void h2f_lw_devs_map (void (*f) (h2f_lw_dev_t*)) {
+  void g (void* dev) { f ((h2f_lw_dev_t*) dev); }
+  map_ (g, h2f_lw_dev_list);
+}
+static const h2f_lw_dev_t* h2f_lw_devs_find (const char* path) {
+  bool pred (void* dev)
+    { return (strcmp (path+1, ((h2f_lw_dev_t*) dev)->name) == 0); }
+  return (const h2f_lw_dev_t*) find_ (pred, h2f_lw_dev_list);
+}
+static void h2f_lw_devs_print () {
+  void print_dev (h2f_lw_dev_t* dev) {
+    printf ( "name: %15s, base_addr: 0x%08x, range: 0x%08x\n"
+           , dev->name, dev->base_addr, dev->range );
+  }
+  h2f_lw_devs_map (print_dev);
+}
 
 // H2F_LW AXI4 port parameters
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,24 +194,28 @@ typedef struct {
 #define EXPOSE_SIMPORTS() ((sim_ports_t*) fuse_get_context()->private_data)
 
 static void* _init (struct fuse_conn_info* conn, struct fuse_config* cfg) {
-  printf ("init stuff\n");
+  printf ("cheri-bgas-fuse-devfs -- init\n");
   // private data initially set to path to simulator ports folder
   const char* portsPath = (char*) fuse_get_context()->private_data;
   size_t len = strlen (portsPath) + 1;
+  // H2F LW interface
+  /**/h2f_lw_devs_print ();
   char* h2flwPath = (char*) malloc (len + strlen ("/" H2F_LW_FOLDER));
   strcpy (h2flwPath, portsPath);
   strcat (h2flwPath, "/" H2F_LW_FOLDER);
   baub_port_fifo_desc_t* h2flwDesc = H2F_LW_(fifo_OpenAsSlave)(h2flwPath);
-  //
   sim_ports_t* simports = (sim_ports_t*) malloc (sizeof (sim_ports_t));
   simports->h2flw = h2flwDesc;
+  // H2F interface TODO
   simports->h2f   = NULL;
+  // F2H interface TODO
   simports->f2h   = NULL;
+  // return simulator ports
   return (void*) simports;
 }
 
 static void _destroy (void* private_data) {
-  printf ("destroy stuff\n");
+  printf ("cheri-bgas-fuse-devfs -- destroy\n");
   sim_ports_t* simports = EXPOSE_SIMPORTS();
   baub_fifo_Close (simports->h2flw);
   free (simports);
@@ -167,7 +225,7 @@ static void _destroy (void* private_data) {
 static int _getattr ( const char* path
                     , struct stat* st
                     , struct fuse_file_info* fi ) {
-  printf ("getattr stuff\n");
+  printf ("cheri-bgas-fuse-devfs -- getattr\n");
   st->st_uid = getuid ();
   st->st_gid = getgid ();
   st->st_atime = time (NULL);
@@ -176,20 +234,11 @@ static int _getattr ( const char* path
   if (strcmp (path, "/") == 0) {
     st->st_mode = S_IFDIR | 0755;
     st->st_nlink = 2;
-  } else if (strcmp (path, "/" DBG_FILE) == 0) {
+  } else if (h2f_lw_devs_find (path) != NULL) {
     st->st_mode = S_IFREG | 0644;
     st->st_nlink = 1;
     st->st_size = 0;
-  } else if (strcmp (path, "/" UART_FILE) == 0) {
-    st->st_mode = S_IFREG | 0644;
-    st->st_nlink = 1;
-    st->st_size = 0;
-  } else if (strcmp (path, "/" VIRTDEV_FILE) == 0) {
-    st->st_mode = S_IFREG | 0644;
-    st->st_nlink = 1;
-    st->st_size = 0;
-  }
-  else return -ENOENT;
+  } else return -ENOENT;
   return 0;
 }
 
@@ -199,23 +248,18 @@ static int _readdir ( const char* path
                     , off_t offset
                     , struct fuse_file_info* fi
                     , enum fuse_readdir_flags flags ) {
-  printf ("readdir stuff\n");
+  printf ("cheri-bgas-fuse-devfs -- readdir\n");
   if (strcmp (path, "/") != 0) return -ENOENT;
   add_entry (entries, ".", NULL, 0, 0);
   add_entry (entries, "..", NULL, 0, 0);
-  add_entry (entries, DBG_FILE, NULL, 0, 0);
-  add_entry (entries, UART_FILE, NULL, 0, 0);
-  add_entry (entries, VIRTDEV_FILE, NULL, 0, 0);
-  printf ("readdir stuff out\n");
+  void f (h2f_lw_dev_t* dev) { add_entry (entries, dev->name, NULL, 0, 0); }
+  h2f_lw_devs_map (&f);
   return 0;
 }
 
 static int _open (const char* path, struct fuse_file_info* fi) {
-  printf ("open stuff\n");
-  if (strcmp (path, "/") == 0) return 0;
-  else if (strcmp (path , "/" DBG_FILE) == 0) return 0;
-  else if (strcmp (path , "/" UART_FILE) == 0) return 0;
-  else if (strcmp (path , "/" VIRTDEV_FILE) == 0) return 0;
+  printf ("cheri-bgas-fuse-devfs -- open\n");
+  if (strcmp (path, "/") == 0 || h2f_lw_devs_find (path) != NULL) return 0;
   return -ENOENT;
 }
 
@@ -231,22 +275,18 @@ static int _ioctl ( const char* path
                   , struct fuse_file_info* fi
                   , unsigned int flags
                   , void* data ) {
-  printf ("ioctl stuff\n");
+  printf ("cheri-bgas-fuse-devfs -- ioctl\n");
   sim_ports_t* simports = EXPOSE_SIMPORTS();
   struct fmem_request* fmemReq = (struct fmem_request*) data;
 
   // compute address and check for in range accesses
   uint32_t addr = fmemReq->offset;
   uint32_t range = 0;
-  if (strcmp (path , "/" DBG_FILE) == 0) {
-    addr += DBG_BASE_ADDR;
-    range = DBG_RANGE;
-  } else if (strcmp (path , "/" UART_FILE) == 0) {
-    addr += UART_BASE_ADDR;
-    range = UART_RANGE;
-  } else if (strcmp (path , "/" VIRTDEV_FILE) == 0) {
-    addr += VIRTDEV_BASE_ADDR;
-    range = VIRTDEV_RANGE;
+  const h2f_lw_dev_t* dev = h2f_lw_devs_find (path);
+  if (dev) {
+    printf ("found device \"%s\"\n", dev->name);
+    addr += dev->base_addr;
+    range += dev->range;
   } else return ERANGE;
   if (fmemReq->offset + fmemReq->access_width > range) return ERANGE;
 
@@ -264,7 +304,7 @@ static int _ioctl ( const char* path
   switch (cmd) {
 
     case _IOWR('X', 1, struct fmem_request): { // FMEM READ
-      printf ("ioctl stuff read\n");
+      printf ("fmem read ioctl\n");
       // send an AXI4 read request AR flit
       t_axi4_arflit* arflit = H2F_LW_AR_(create_flit)(NULL);
       arflit->arid[0] = 0;
@@ -295,7 +335,7 @@ static int _ioctl ( const char* path
     }
 
     case _IOWR('X', 2, struct fmem_request):  { // FMEM WRITE
-      printf ("ioctl stuff write\n");
+      printf ("fmem write ioctl\n");
       // send an AXI4 write request AW flit
       t_axi4_awflit* awflit = H2F_LW_AW_(create_flit)(NULL);
       awflit->awid[0] = 0;
@@ -359,7 +399,7 @@ int main (int argc, char** argv)
   , .ioctl   = _ioctl
   };
 
-  printf ("calling fuse main\n");
+  printf ("cheri-bgas-fuse-devfs -- fuse_main\n");
 
   // call fuse main, private data context set to the simulator ports folder
   return fuse_main (argc, argv, &ops, simports_dir);
