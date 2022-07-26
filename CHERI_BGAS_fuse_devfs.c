@@ -53,16 +53,7 @@
 
 // list helpers
 ////////////////////////////////////////////////////////////////////////////////
-typedef struct node { void* payload; struct node* next; } node_t;
-typedef node_t* list_t;
-static void map_ (void (*f) (void*), list_t xs) {
-  if (xs != NULL) { f (xs->payload); map_ (f, xs->next); }
-}
-static void* find_ (bool (*pred) (void*), const list_t xs) {
-  if (xs == NULL) return NULL;
-  else if (pred (xs->payload)) return xs->payload;
-  else return find_ (pred, xs->next);
-}
+
 // H2F LW devices
 ////////////////////////////////////////////////////////////////////////////////
 typedef struct h2f_lw_dev {
@@ -70,50 +61,40 @@ typedef struct h2f_lw_dev {
   const uint32_t base_addr;
   const uint32_t range;
 } h2f_lw_dev_t;
-static const list_t h2f_lw_dev_list =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "debug_unit"
-                                       , .base_addr = 0x00000000
-                                       , .range     = 0x00001000 }
-          , .next =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "irqs"
-                                       , .base_addr = 0x00001000
-                                       , .range     = 0x00001000 }
-          , .next =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "misc"
-                                       , .base_addr = 0x00002000
-                                       , .range     = 0x00001000 }
-          , .next =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "uart0"
-                                       , .base_addr = 0x00003000
-                                       , .range     = 0x00001000 }
-          , .next =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "uart1"
-                                       , .base_addr = 0x00004000
-                                       , .range     = 0x00001000 }
-          , .next =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "h2f_addr_ctrl"
-                                       , .base_addr = 0x00005000
-                                       , .range     = 0x00001000 }
-          , .next =
-&(node_t) { .payload = &(h2f_lw_dev_t) { .name      = "virtual_device"
-                                       , .base_addr = 0x00008000
-                                       , .range     = 0x00004000 }
-          , .next = NULL }}}}}}};
-static void h2f_lw_devs_map (void (*f) (h2f_lw_dev_t*)) {
-  void g (void* dev) { f ((h2f_lw_dev_t*) dev); }
-  map_ (g, h2f_lw_dev_list);
-}
+static const h2f_lw_dev_t h2f_lw_dev_list[] =
+{ { .name      = "debug_unit"
+  , .base_addr = 0x00000000
+  , .range     = 0x00001000 },
+  { .name      = "irqs"
+  , .base_addr = 0x00001000
+  , .range     = 0x00001000 },
+  { .name      = "misc"
+  , .base_addr = 0x00002000
+  , .range     = 0x00001000 },
+  { .name      = "uart0"
+  , .base_addr = 0x00003000
+  , .range     = 0x00001000 },
+  { .name      = "uart1"
+  , .base_addr = 0x00004000
+  , .range     = 0x00001000 },
+  { .name      = "h2f_addr_ctrl"
+  , .base_addr = 0x00005000
+  , .range     = 0x00001000 },
+  { .name      = "virtual_device"
+  , .base_addr = 0x00008000
+  , .range     = 0x00004000 }
+};
+int len_h2f_lw_dev_list = sizeof(h2f_lw_dev_list)/sizeof(h2f_lw_dev_t);
 static const h2f_lw_dev_t* h2f_lw_devs_find (const char* path) {
-  bool pred (void* dev)
-    { return (strcmp (path+1, ((h2f_lw_dev_t*) dev)->name) == 0); }
-  return (const h2f_lw_dev_t*) find_ (pred, h2f_lw_dev_list);
+  for (int i = 0; i < len_h2f_lw_dev_list; i++)
+    if (strcmp (path+1, h2f_lw_dev_list[i].name) == 0)
+        return &h2f_lw_dev_list[i];
+  return NULL;
 }
 static void h2f_lw_devs_print () {
-  void print_dev (h2f_lw_dev_t* dev) {
+  for (int i = 0; i < len_h2f_lw_dev_list; i++)
     printf ( "name: %15s, base_addr: 0x%08x, range: 0x%08x\n"
-           , dev->name, dev->base_addr, dev->range );
-  }
-  h2f_lw_devs_map (print_dev);
+           , h2f_lw_dev_list[i].name, h2f_lw_dev_list[i].base_addr, h2f_lw_dev_list[i].range );
 }
 
 // H2F_LW AXI4 port parameters
@@ -252,8 +233,8 @@ static int _readdir ( const char* path
   if (strcmp (path, "/") != 0) return -ENOENT;
   add_entry (entries, ".", NULL, 0, 0);
   add_entry (entries, "..", NULL, 0, 0);
-  void f (h2f_lw_dev_t* dev) { add_entry (entries, dev->name, NULL, 0, 0); }
-  h2f_lw_devs_map (&f);
+  for (int i = 0; i < len_h2f_lw_dev_list; i++)
+    add_entry (entries, h2f_lw_dev_list[i].name, NULL, 0, 0);
   return 0;
 }
 
