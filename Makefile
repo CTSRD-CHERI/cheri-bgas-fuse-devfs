@@ -21,7 +21,7 @@ $(OBJDIR)/BlueAXI4UnixBridges.o: $(BLUEAXI4DIR)/BlueAXI4UnixBridges.c $(BLUEAXI4
 	$(CC) $(CFLAGS) -I $(BLUEAXI4DIR) -I $(BLUEUNIXBRIDGESDIR) -c -o $@ $<
 
 $(OUTPT): $(SRC) $(OBJDIR)/BlueUnixBridges.o $(OBJDIR)/BlueAXI4UnixBridges.o
-	$(CC) -L $(OBJDIR) -I $(BLUEAXI4DIR) -I $(BLUEUNIXBRIDGESDIR) -o $@ $^ $(FUSECFLAGS)
+	$(CC) -L $(OBJDIR) -I $(CURDIR) -I $(BLUEAXI4DIR) -I $(BLUEUNIXBRIDGESDIR) -o $@ $^ $(FUSECFLAGS)
 
 .PHONY: clean
 
