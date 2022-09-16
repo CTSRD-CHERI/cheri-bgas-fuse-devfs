@@ -50,121 +50,9 @@
 
 #include <BlueUnixBridges.h>
 #include <BlueAXI4UnixBridges.h>
+#include <h2f_lw.h>
+#include <h2f.h>
 
-// list helpers
-////////////////////////////////////////////////////////////////////////////////
-
-// H2F LW devices
-////////////////////////////////////////////////////////////////////////////////
-typedef struct h2f_lw_dev {
-  const char* name;
-  const uint32_t base_addr;
-  const uint32_t range;
-} h2f_lw_dev_t;
-static const h2f_lw_dev_t h2f_lw_dev_list[] =
-{ { .name      = "debug_unit"
-  , .base_addr = 0x00000000
-  , .range     = 0x00001000 },
-  { .name      = "irqs"
-  , .base_addr = 0x00001000
-  , .range     = 0x00001000 },
-  { .name      = "misc"
-  , .base_addr = 0x00002000
-  , .range     = 0x00001000 },
-  { .name      = "uart0"
-  , .base_addr = 0x00003000
-  , .range     = 0x00001000 },
-  { .name      = "uart1"
-  , .base_addr = 0x00004000
-  , .range     = 0x00001000 },
-  { .name      = "h2f_addr_ctrl"
-  , .base_addr = 0x00005000
-  , .range     = 0x00001000 },
-  { .name      = "virtual_device"
-  , .base_addr = 0x00008000
-  , .range     = 0x00004000 }
-};
-int len_h2f_lw_dev_list = sizeof(h2f_lw_dev_list)/sizeof(h2f_lw_dev_t);
-static const h2f_lw_dev_t* h2f_lw_devs_find (const char* path) {
-  for (int i = 0; i < len_h2f_lw_dev_list; i++)
-    if (strcmp (path+1, h2f_lw_dev_list[i].name) == 0)
-        return &h2f_lw_dev_list[i];
-  return NULL;
-}
-static void h2f_lw_devs_print () {
-  for (int i = 0; i < len_h2f_lw_dev_list; i++)
-    printf ( "name: %15s, base_addr: 0x%08x, range: 0x%08x\n"
-           , h2f_lw_dev_list[i].name, h2f_lw_dev_list[i].base_addr, h2f_lw_dev_list[i].range );
-}
-
-// H2F_LW AXI4 port parameters
-////////////////////////////////////////////////////////////////////////////////
-
-#define H2F_LW_FOLDER "h2f_lw"
-
-#ifndef H2F_LW_ID
-#define H2F_LW_ID 0
-#endif
-#ifndef H2F_LW_ADDR
-#define H2F_LW_ADDR 21
-#endif
-#ifndef H2F_LW_DATA
-#define H2F_LW_DATA 32
-#endif
-#ifndef H2F_LW_AWUSER
-#define H2F_LW_AWUSER 0
-#endif
-#ifndef H2F_LW_WUSER
-#define H2F_LW_WUSER 0
-#endif
-#ifndef H2F_LW_BUSER
-#define H2F_LW_BUSER 0
-#endif
-#ifndef H2F_LW_ARUSER
-#define H2F_LW_ARUSER 0
-#endif
-#ifndef H2F_LW_RUSER
-#define H2F_LW_RUSER 0
-#endif
-
-DEF_AXI4_API( H2F_LW_ID, H2F_LW_ADDR, H2F_LW_DATA
-            , H2F_LW_AWUSER, H2F_LW_WUSER, H2F_LW_BUSER
-            , H2F_LW_ARUSER, H2F_LW_RUSER )
-
-#define _H2F_LW_( H2F_LW_ID, H2F_LW_ADDR, H2F_LW_DATA \
-                , H2F_LW_AWUSER, H2F_LW_WUSER, H2F_LW_BUSER \
-                , H2F_LW_ARUSER, H2F_LW_RUSER \
-                , sym ) \
-  AXI4_( H2F_LW_ID, H2F_LW_ADDR, H2F_LW_DATA \
-       , H2F_LW_AWUSER, H2F_LW_WUSER, H2F_LW_BUSER \
-       , H2F_LW_ARUSER, H2F_LW_RUSER \
-       , sym )
-#define H2F_LW_(sym) _H2F_LW_( H2F_LW_ID, H2F_LW_ADDR, H2F_LW_DATA \
-                             , H2F_LW_AWUSER, H2F_LW_WUSER, H2F_LW_BUSER \
-                             , H2F_LW_ARUSER, H2F_LW_RUSER \
-                             , sym )
-
-#define _H2F_LW_AW_(H2F_LW_ID, H2F_LW_ADDR, H2F_LW_AWUSER, sym) \
-  AXI4_AW_(H2F_LW_ID, H2F_LW_ADDR, H2F_LW_AWUSER, sym)
-#define H2F_LW_AW_(sym) _H2F_LW_AW_(H2F_LW_ID, H2F_LW_ADDR, H2F_LW_AWUSER, sym)
-
-#define _H2F_LW_W_(H2F_LW_DATA, H2F_LW_WUSER, sym) \
-  AXI4_W_(H2F_LW_DATA, H2F_LW_WUSER, sym)
-#define H2F_LW_W_(sym) _H2F_LW_W_(H2F_LW_DATA, H2F_LW_WUSER, sym)
-
-#define _H2F_LW_B_(H2F_LW_ID, H2F_LW_BUSER, sym) \
-  AXI4_B_(H2F_LW_ID, H2F_LW_BUSER, sym)
-#define H2F_LW_B_(sym) _H2F_LW_B_(H2F_LW_ID, H2F_LW_BUSER, sym)
-
-#define _H2F_LW_AR_(H2F_LW_ID, H2F_LW_ADDR, H2F_LW_ARUSER, sym) \
-  AXI4_AR_(H2F_LW_ID, H2F_LW_ADDR, H2F_LW_ARUSER, sym)
-#define H2F_LW_AR_(sym) _H2F_LW_AR_(H2F_LW_ID, H2F_LW_ADDR, H2F_LW_ARUSER, sym)
-
-#define _H2F_LW_R_(H2F_LW_ID, H2F_LW_DATA, H2F_LW_RUSER, sym) \
-  AXI4_R_(H2F_LW_ID, H2F_LW_DATA, H2F_LW_RUSER, sym)
-#define H2F_LW_R_(sym) _H2F_LW_R_(H2F_LW_ID, H2F_LW_DATA, H2F_LW_RUSER, sym)
-
-////////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
   baub_port_fifo_desc_t* h2flw;
@@ -178,17 +66,9 @@ static void* _init (struct fuse_conn_info* conn, struct fuse_config* cfg) {
   printf ("cheri-bgas-fuse-devfs -- init\n");
   // private data initially set to path to simulator ports folder
   const char* portsPath = (char*) fuse_get_context()->private_data;
-  size_t len = strlen (portsPath) + 1;
-  // H2F LW interface
-  /**/h2f_lw_devs_print ();
-  char* h2flwPath = (char*) malloc (len + strlen ("/" H2F_LW_FOLDER));
-  strcpy (h2flwPath, portsPath);
-  strcat (h2flwPath, "/" H2F_LW_FOLDER);
-  baub_port_fifo_desc_t* h2flwDesc = H2F_LW_(fifo_OpenAsSlave)(h2flwPath);
   sim_ports_t* simports = (sim_ports_t*) malloc (sizeof (sim_ports_t));
-  simports->h2flw = h2flwDesc;
-  // H2F interface TODO
-  simports->h2f   = NULL;
+  simports->h2flw = h2f_lw_init(portsPath);
+  simports->h2f   = h2f_init(portsPath);
   // F2H interface TODO
   simports->f2h   = NULL;
   // return simulator ports
@@ -199,6 +79,7 @@ static void _destroy (void* private_data) {
   printf ("cheri-bgas-fuse-devfs -- destroy\n");
   sim_ports_t* simports = EXPOSE_SIMPORTS();
   baub_fifo_Close (simports->h2flw);
+  baub_fifo_Close (simports->h2f);
   free (simports);
   //free (ctxt);
 }
@@ -215,7 +96,7 @@ static int _getattr ( const char* path
   if (strcmp (path, "/") == 0) {
     st->st_mode = S_IFDIR | 0755;
     st->st_nlink = 2;
-  } else if (h2f_lw_devs_find (path) != NULL) {
+  } else if (h2f_lw_devs_find (path) != NULL || h2f_devs_find (path) != NULL) {
     st->st_mode = S_IFREG | 0644;
     st->st_nlink = 1;
     st->st_size = 0;
@@ -235,12 +116,14 @@ static int _readdir ( const char* path
   add_entry (entries, "..", NULL, 0, 0);
   for (int i = 0; i < len_h2f_lw_dev_list; i++)
     add_entry (entries, h2f_lw_dev_list[i].name, NULL, 0, 0);
+  for (int i = 0; i < len_h2f_dev_list; i++)
+    add_entry (entries, h2f_dev_list[i].name, NULL, 0, 0);
   return 0;
 }
 
 static int _open (const char* path, struct fuse_file_info* fi) {
   printf ("cheri-bgas-fuse-devfs -- open\n");
-  if (strcmp (path, "/") == 0 || h2f_lw_devs_find (path) != NULL) return 0;
+  if (strcmp (path, "/") == 0 || h2f_lw_devs_find (path) != NULL || h2f_devs_find (path) != NULL) return 0;
   return -ENOENT;
 }
 
@@ -263,21 +146,70 @@ static int _ioctl ( const char* path
   // compute address and check for in range accesses
   uint32_t addr = fmemReq->offset;
   uint32_t range = 0;
-  const h2f_lw_dev_t* dev = h2f_lw_devs_find (path);
-  if (dev) {
-    printf ("found device \"%s\"\n", dev->name);
-    addr += dev->base_addr;
-    range += dev->range;
+  const mem_mapped_dev_t* dev = NULL;
+  t_axi4_arflit* (*ar_flit_creator)(const uint8_t*) = NULL;
+  void (*ar_flit_printer)(const t_axi4_arflit*) = NULL;
+  t_axi4_rflit* (*r_flit_creator)(const uint8_t*) = NULL;
+  void (*r_flit_printer)(const t_axi4_rflit*) = NULL;
+  t_axi4_awflit* (*aw_flit_creator)(const uint8_t*) = NULL;
+  void (*aw_flit_printer)(const t_axi4_awflit*) = NULL;
+  t_axi4_wflit* (*w_flit_creator)(const uint8_t*) = NULL;
+  void (*w_flit_printer)(const t_axi4_wflit*) = NULL;
+  t_axi4_bflit* (*b_flit_creator)(const uint8_t*) = NULL;
+  void (*b_flit_printer)(const t_axi4_bflit*) = NULL;
+  baub_port_fifo_desc_t* axi_port_descriptor = NULL;
+  // Mask for address bits to give the number of bytes skipped in a flit to reach the 32-bit word of interest.
+  uint32_t flit_size_mask = 0x0;
+  if ((dev = h2f_lw_devs_find (path))) {
+    ar_flit_creator = &H2F_LW_AR_(create_flit);
+    ar_flit_printer = &H2F_LW_AR_(print_flit);
+    r_flit_creator  = &H2F_LW_R_(create_flit);
+    r_flit_printer  = &H2F_LW_R_(print_flit);
+    aw_flit_creator = &H2F_LW_AW_(create_flit);
+    aw_flit_printer = &H2F_LW_AW_(print_flit);
+    w_flit_creator  = &H2F_LW_W_(create_flit);
+    w_flit_printer  = &H2F_LW_W_(print_flit);
+    b_flit_creator  = &H2F_LW_B_(create_flit);
+    b_flit_printer  = &H2F_LW_B_(print_flit);
+    axi_port_descriptor = simports->h2flw;
+    switch(fmemReq->access_width) {
+      case 1: flit_size_mask = 0b00000011; break;
+      case 2: flit_size_mask = 0b00000010; break;
+      case 4: flit_size_mask = 0b00000000;
+    }
+  } else if ((dev = h2f_devs_find (path))){
+    ar_flit_creator = &H2F_AR_(create_flit);
+    ar_flit_printer = &H2F_AR_(print_flit);
+    r_flit_creator  = &H2F_R_(create_flit);
+    r_flit_printer  = &H2F_R_(print_flit);
+    aw_flit_creator = &H2F_AW_(create_flit);
+    aw_flit_printer = &H2F_AW_(print_flit);
+    w_flit_creator  = &H2F_W_(create_flit);
+    w_flit_printer  = &H2F_W_(print_flit);
+    b_flit_creator  = &H2F_B_(create_flit);
+    b_flit_printer  = &H2F_B_(print_flit);
+    axi_port_descriptor = simports->h2f;
+    switch(fmemReq->access_width) {
+      case 1: flit_size_mask = 0b00001111; break;
+      case 2: flit_size_mask = 0b00001110; break;
+      case 4: flit_size_mask = 0b00001100;
+    }
   } else return ERANGE;
+  
+  printf ("found device \"%s\"\n", dev->name);
+  addr += dev->base_addr;
+  range += dev->range;
+  uint32_t flit_offset = addr & flit_size_mask;
+  
   if (fmemReq->offset + fmemReq->access_width > range) return ERANGE;
 
   // prepare AXI4 access size and byte strobe
   uint8_t size = 0;
   uint8_t strb = 0;
   switch(fmemReq->access_width) {
-    case 1: size = 0; strb = 0b00000001; break;
-    case 2: size = 1; strb = 0b00000011; break;
-    case 4: size = 2; strb = 0b00001111; break;
+    case 1: size = 0; strb = 0b00000001 << flit_offset; break;
+    case 2: size = 1; strb = 0b00000011 << flit_offset; break;
+    case 4: size = 2; strb = 0b00001111 << flit_offset; break;
     default: return -1;
   }
 
@@ -287,7 +219,7 @@ static int _ioctl ( const char* path
     case _IOWR('X', 1, struct fmem_request): { // FMEM READ
       printf ("fmem read ioctl\n");
       // send an AXI4 read request AR flit
-      t_axi4_arflit* arflit = H2F_LW_AR_(create_flit)(NULL);
+      t_axi4_arflit* arflit = ar_flit_creator(NULL);
       arflit->arid[0] = 0;
       for (int i = 0; i < 4; i++) arflit->araddr[i] = ((uint8_t*) &addr)[i];
       arflit->arlen = 0;
@@ -299,18 +231,18 @@ static int _ioctl ( const char* path
       /*TODO*/ arflit->arqos = 0;
       /*TODO*/ arflit->arregion = 0;
       arflit->aruser[0] = 0;
-      H2F_LW_AR_(print_flit)(arflit);
+      ar_flit_printer(arflit);
       printf ("\n");
-      while (!bub_fifo_Produce (simports->h2flw->ar, (void*) arflit));
+      while (!bub_fifo_Produce (axi_port_descriptor->ar, (void*) arflit));
       // get an AXI4 read response R flit
-      t_axi4_rflit* rflit = H2F_LW_R_(create_flit)(NULL);
-      while (!bub_fifo_Consume (simports->h2flw->r, (void*) rflit));
-      H2F_LW_R_(print_flit)(rflit);
+      t_axi4_rflit* rflit = r_flit_creator(NULL);
+      while (!bub_fifo_Consume (axi_port_descriptor->r, (void*) rflit));
+      r_flit_printer(rflit);
       printf ("\n");
       // return the response data through the fmem request pointer
       // TODO check rflit->rresp
       for (int i = 0; i < fmemReq->access_width; i++)
-        ((uint8_t*) &(fmemReq->data))[i] = rflit->rdata[i];
+        ((uint8_t*) &(fmemReq->data))[i] = rflit->rdata[flit_offset + i];
       return 0;
       break;
     }
@@ -318,7 +250,7 @@ static int _ioctl ( const char* path
     case _IOWR('X', 2, struct fmem_request):  { // FMEM WRITE
       printf ("fmem write ioctl\n");
       // send an AXI4 write request AW flit
-      t_axi4_awflit* awflit = H2F_LW_AW_(create_flit)(NULL);
+      t_axi4_awflit* awflit = aw_flit_creator(NULL);
       awflit->awid[0] = 0;
       for (int i = 0; i < 4; i++) awflit->awaddr[i] = ((uint8_t*) &addr)[i];
       awflit->awlen = 0;
@@ -330,23 +262,23 @@ static int _ioctl ( const char* path
       /*TODO*/ awflit->awqos = 0;
       /*TODO*/ awflit->awregion = 0;
       awflit->awuser[0];
-      H2F_LW_AW_(print_flit)(awflit);
+      aw_flit_printer(awflit);
       printf ("\n");
-      while (!bub_fifo_Produce (simports->h2flw->aw, (void*) awflit));
+      while (!bub_fifo_Produce (axi_port_descriptor->aw, (void*) awflit));
       // send an AXI4 write request W flit
-      t_axi4_wflit* wflit = H2F_LW_W_(create_flit)(NULL);
+      t_axi4_wflit* wflit = w_flit_creator(NULL);
       for (int i = 0; i < 4; i++)
-        wflit->wdata[i] = ((uint8_t*) &fmemReq->data)[i];
+        wflit->wdata[flit_offset + i] = ((uint8_t*) &fmemReq->data)[i];
       wflit->wstrb[0] = strb;
       wflit->wlast = 0b00000001;
       wflit->wuser[0] = 0;
-      H2F_LW_W_(print_flit)(wflit);
+      w_flit_printer(wflit);
       printf ("\n");
-      while (!bub_fifo_Produce (simports->h2flw->w, (void*) wflit));
+      while (!bub_fifo_Produce (axi_port_descriptor->w, (void*) wflit));
       // get an AXI4 write response B flit
-      t_axi4_bflit* bflit = H2F_LW_B_(create_flit)(NULL);
-      while (!bub_fifo_Consume (simports->h2flw->b, (void*) bflit));
-      H2F_LW_B_(print_flit)(bflit);
+      t_axi4_bflit* bflit = b_flit_creator(NULL);
+      while (!bub_fifo_Consume (axi_port_descriptor->b, (void*) bflit));
+      b_flit_printer(bflit);
       printf ("\n");
       // TODO check bflit->bresp
       return 0;
