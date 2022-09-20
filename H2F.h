@@ -64,7 +64,7 @@ int n_h2f_devs = sizeof(h2f_devs)/sizeof(mem_mapped_dev_t);
 #define H2F_FOLDER "h2f"
 
 #ifndef H2F_ID
-#define H2F_ID 0
+#define H2F_ID 4
 #endif
 #ifndef H2F_ADDR
 #define H2F_ADDR 32 // top 32 bit set through the dedicated ctrl on H2F_LW port

@@ -47,6 +47,7 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include <BlueUnixBridges.h>
 #include <BlueAXI4UnixBridges.h>
@@ -83,6 +84,7 @@ static void _destroy (void* private_data) {
   sim_ports_t* simports = EXPOSE_SIMPORTS();
   baub_fifo_Close (simports->h2f);
   baub_fifo_Close (simports->h2flw);
+  baub_fifo_Close (simports->h2f);
   free (simports);
   //free (ctxt);
 }
@@ -162,6 +164,7 @@ static int _ioctl ( const char* path
   void (*ar_print_flit) (const t_axi4_arflit* flit) = NULL;
   void (*r_print_flit)  (const t_axi4_rflit* flit)  = NULL;
   baub_port_fifo_desc_t* simport = NULL;
+  uint64_t offset_mask = ~0;
   if ((dev = devs_find (path, h2f_lw_devs, n_h2f_lw_devs))) {
     aw_create_flit = &H2F_LW_AW_(create_flit);
     w_create_flit  = &H2F_LW_W_(create_flit);
@@ -174,6 +177,7 @@ static int _ioctl ( const char* path
     ar_print_flit = &H2F_LW_AR_(print_flit);
     r_print_flit  = &H2F_LW_R_(print_flit);
     simport = simports->h2flw;
+    offset_mask = 0x3;
   }
   else if ((dev = devs_find (path, h2f_devs, n_h2f_devs))) {
     aw_create_flit = &H2F_AW_(create_flit);
@@ -187,21 +191,24 @@ static int _ioctl ( const char* path
     ar_print_flit = &H2F_AR_(print_flit);
     r_print_flit  = &H2F_R_(print_flit);
     simport = simports->h2f;
+    offset_mask = 0xf;
   } else return ERANGE;
 
   // compute address and check for in range accesses
   printf ("found device \"%s\"\n", dev->name);
   uint64_t addr = 0xffffffff & (fmemReq->offset + dev->base_addr);
   uint64_t range = 0xffffffff & dev->range;
+  uint64_t flit_offset =
+    (~0 << (int) log2 (fmemReq->access_width)) & offset_mask;
   if (fmemReq->offset + fmemReq->access_width > range) return ERANGE;
 
   // prepare AXI4 access size and byte strobe
   uint8_t size = 0;
   uint8_t strb = 0;
   switch(fmemReq->access_width) {
-    case 1: size = 0; strb = 0b00000001; break;
-    case 2: size = 1; strb = 0b00000011; break;
-    case 4: size = 2; strb = 0b00001111; break;
+    case 1: size = 0; strb = 0b00000001 << flit_offset; break;
+    case 2: size = 1; strb = 0b00000011 << flit_offset; break;
+    case 4: size = 2; strb = 0b00001111 << flit_offset; break;
     default: return -1;
   }
 
@@ -234,7 +241,7 @@ static int _ioctl ( const char* path
       // return the response data through the fmem request pointer
       // TODO check rflit->rresp
       for (int i = 0; i < fmemReq->access_width; i++)
-        ((uint8_t*) &(fmemReq->data))[i] = rflit->rdata[i];
+        ((uint8_t*) &(fmemReq->data))[i] = rflit->rdata[flit_offset + i];
       return 0;
       break;
     }
@@ -260,7 +267,7 @@ static int _ioctl ( const char* path
       // send an AXI4 write request W flit
       t_axi4_wflit* wflit = w_create_flit (NULL);
       for (int i = 0; i < 4; i++)
-        wflit->wdata[i] = ((uint8_t*) &fmemReq->data)[i];
+        wflit->wdata[flit_offset + i] = ((uint8_t*) &fmemReq->data)[i];
       wflit->wstrb[0] = strb;
       wflit->wlast = 0b00000001;
       wflit->wuser[0] = 0;

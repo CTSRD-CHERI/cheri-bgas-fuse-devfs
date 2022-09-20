@@ -6,8 +6,9 @@ BLUEUNIXBRIDGESDIR = $(BLUEAXI4DIR)/BlueUnixBridges
 
 OBJDIR = obj
 
-CFLAGS = -O3  -Wall -Wno-unused -D_FILE_OFFSET_BITS=64 -fPIC
-FUSECFLAGS = $(CFLAGS) $(shell pkg-config fuse3 --cflags --libs)
+CFLAGS = -O3 -Wall -Wno-unused -D_FILE_OFFSET_BITS=64 -fPIC
+LINKFLAGS = -lm
+FUSECFLAGS = $(CFLAGS) $(LINKFLAGS) $(shell pkg-config fuse3 --cflags --libs)
 
 all: $(OUTPT)
 
