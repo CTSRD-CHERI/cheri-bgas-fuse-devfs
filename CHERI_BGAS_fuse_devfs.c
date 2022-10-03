@@ -164,7 +164,7 @@ static int _ioctl ( const char* path
   void (*ar_print_flit) (const t_axi4_arflit* flit) = NULL;
   void (*r_print_flit)  (const t_axi4_rflit* flit)  = NULL;
   baub_port_fifo_desc_t* simport = NULL;
-  uint64_t offset_mask = ~0;
+  uint64_t offset_mask = (~0 << (int) log2 (fmemReq->access_width));
   if ((dev = devs_find (path, h2f_lw_devs, n_h2f_lw_devs))) {
     aw_create_flit = &H2F_LW_AW_(create_flit);
     w_create_flit  = &H2F_LW_W_(create_flit);
@@ -177,7 +177,7 @@ static int _ioctl ( const char* path
     ar_print_flit = &H2F_LW_AR_(print_flit);
     r_print_flit  = &H2F_LW_R_(print_flit);
     simport = simports->h2flw;
-    offset_mask = 0x3;
+    offset_mask &= 0x3;
   }
   else if ((dev = devs_find (path, h2f_devs, n_h2f_devs))) {
     aw_create_flit = &H2F_AW_(create_flit);
@@ -191,15 +191,14 @@ static int _ioctl ( const char* path
     ar_print_flit = &H2F_AR_(print_flit);
     r_print_flit  = &H2F_R_(print_flit);
     simport = simports->h2f;
-    offset_mask = 0xf;
+    offset_mask &= 0xf;
   } else return ERANGE;
 
   // compute address and check for in range accesses
   printf ("found device \"%s\"\n", dev->name);
   uint64_t addr = 0xffffffff & (fmemReq->offset + dev->base_addr);
   uint64_t range = 0xffffffff & dev->range;
-  uint64_t flit_offset =
-    (~0 << (int) log2 (fmemReq->access_width)) & offset_mask;
+  uint64_t flit_offset = addr & offset_mask;
   if (fmemReq->offset + fmemReq->access_width > range) return ERANGE;
 
   // prepare AXI4 access size and byte strobe
