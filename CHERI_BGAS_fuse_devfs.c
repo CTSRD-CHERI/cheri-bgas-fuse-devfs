@@ -164,7 +164,9 @@ static int _ioctl ( const char* path
   void (*ar_print_flit) (const t_axi4_arflit* flit) = NULL;
   void (*r_print_flit)  (const t_axi4_rflit* flit)  = NULL;
   baub_port_fifo_desc_t* simport = NULL;
+  printf ("cheri-bgas-fuse-devfs -- CHECKPOINT A\n");
   uint64_t offset_mask = (~0 << (int) log2 (fmemReq->access_width));
+  printf ("cheri-bgas-fuse-devfs -- CHECKPOINT B\n");
   if ((dev = devs_find (path, h2f_lw_devs, n_h2f_lw_devs))) {
     aw_create_flit = &H2F_LW_AW_(create_flit);
     w_create_flit  = &H2F_LW_W_(create_flit);
@@ -231,10 +233,10 @@ static int _ioctl ( const char* path
       arflit->aruser[0] = 0;
       ar_print_flit (arflit);
       printf ("\n");
-      while (!bub_fifo_Produce (simport->ar, (void*) arflit));
+      bub_fifo_ProduceElement (simport->ar, (void*) arflit);
       // get an AXI4 read response R flit
       t_axi4_rflit* rflit = r_create_flit (NULL);
-      while (!bub_fifo_Consume (simport->r, (void*) rflit));
+      bub_fifo_ConsumeElement (simport->r, (void*) rflit);
       r_print_flit (rflit);
       printf ("\n");
       // return the response data through the fmem request pointer
@@ -262,7 +264,7 @@ static int _ioctl ( const char* path
       awflit->awuser[0];
       aw_print_flit (awflit);
       printf ("\n");
-      while (!bub_fifo_Produce (simport->aw, (void*) awflit));
+      bub_fifo_ProduceElement (simport->aw, (void*) awflit);
       // send an AXI4 write request W flit
       t_axi4_wflit* wflit = w_create_flit (NULL);
       for (int i = 0; i < 4; i++)
@@ -272,10 +274,10 @@ static int _ioctl ( const char* path
       wflit->wuser[0] = 0;
       w_print_flit (wflit);
       printf ("\n");
-      while (!bub_fifo_Produce (simport->w, (void*) wflit));
+      bub_fifo_ProduceElement (simport->w, (void*) wflit);
       // get an AXI4 write response B flit
       t_axi4_bflit* bflit = b_create_flit (NULL);
-      while (!bub_fifo_Consume (simport->b, (void*) bflit));
+      bub_fifo_ConsumeElement (simport->b, (void*) bflit);
       b_print_flit (bflit);
       printf ("\n");
       // TODO check bflit->bresp
