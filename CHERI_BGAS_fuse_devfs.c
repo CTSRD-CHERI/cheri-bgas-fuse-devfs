@@ -164,9 +164,7 @@ static int _ioctl ( const char* path
   void (*ar_print_flit) (const t_axi4_arflit* flit) = NULL;
   void (*r_print_flit)  (const t_axi4_rflit* flit)  = NULL;
   baub_port_fifo_desc_t* simport = NULL;
-  printf ("cheri-bgas-fuse-devfs -- CHECKPOINT A\n");
   uint64_t offset_mask = (~0 << (int) log2 (fmemReq->access_width));
-  printf ("cheri-bgas-fuse-devfs -- CHECKPOINT B\n");
   if ((dev = devs_find (path, h2f_lw_devs, n_h2f_lw_devs))) {
     aw_create_flit = &H2F_LW_AW_(create_flit);
     w_create_flit  = &H2F_LW_W_(create_flit);
