@@ -4,7 +4,7 @@
 /*-
 * SPDX-License-Identifier: BSD-2-Clause
 *
-* Copyright (c) 2022 Alexandre Joannou <aj443@cam.ac.uk>
+* Copyright (c) 2022-2023 Alexandre Joannou <aj443@cam.ac.uk>
 * Copyright (c) 2022 Jon Woodruff <Jonathan.Woodruff@cl.cam.ac.uk>
 *
 * This material is based upon work supported by the DoD Information Analysis
@@ -44,6 +44,7 @@
 #include <mem_mapped_dev.h>
 #include <BlueUnixBridges.h>
 #include <BlueAXI4UnixBridges.h>
+#include <CHERI_BGAS_fuse_devfs.h>
 
 // H2F devices
 ////////////////////////////////////////////////////////////////////////////////
@@ -124,14 +125,26 @@ DEF_AXI4_API( H2F_ID, H2F_ADDR, H2F_DATA
   AXI4_R_(H2F_ID, H2F_DATA, H2F_RUSER, h2f, sym)
 #define H2F_R_(sym) _H2F_R_(H2F_ID, H2F_DATA, H2F_RUSER, sym)
 
-static baub_port_fifo_desc_t* h2f_init (const char* path) {
-  size_t len = strlen (path) + 1;
+static axi_sim_port_t* h2f_init (const char* portpath, const char* logpath) {
+  axi_sim_port_t* axi_sim_port = malloc (sizeof (axi_sim_port_t));
   // H2F interface
+  size_t len = strlen (portpath) + 1;
   /**/devs_print (h2f_devs, n_h2f_devs);
   char* h2fPath = (char*) malloc (len + strlen ("/" H2F_FOLDER));
-  strcpy (h2fPath, path);
+  strcpy (h2fPath, portpath);
   strcat (h2fPath, "/" H2F_FOLDER);
-  return H2F_(fifo_OpenAsSlave)(h2fPath);
+  axi_sim_port->fifo = H2F_(fifo_OpenAsSlave)(h2fPath);
+  // H2F logstream
+  axi_sim_port->logfile = fopen (logpath, "w+");
+  //TODO check for fopen error
+  free (h2fPath);
+  return axi_sim_port;
+}
+
+static void h2f_destroy (axi_sim_port_t* axi_sim_port) {
+  fclose (axi_sim_port->logfile);
+  baub_fifo_Close (axi_sim_port->fifo);
+  free (axi_sim_port);
 }
 
 #endif

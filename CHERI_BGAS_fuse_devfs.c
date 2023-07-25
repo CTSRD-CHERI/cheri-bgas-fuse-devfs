@@ -1,7 +1,7 @@
 /*-
 * SPDX-License-Identifier: BSD-2-Clause
 *
-* Copyright (c) 2022 Alexandre Joannou <aj443@cam.ac.uk>
+* Copyright (c) 2022-2023 Alexandre Joannou <aj443@cam.ac.uk>
 * Copyright (c) 2021 Ruslan Bukin <br@bsdpad.com>
 * Copyright (c) 2022 Jon Woodruff <Jonathan.Woodruff@cl.cam.ac.uk>
 *
@@ -49,32 +49,37 @@
 #include <stdbool.h>
 #include <math.h>
 
-#include <BlueUnixBridges.h>
-#include <BlueAXI4UnixBridges.h>
+#include <CHERI_BGAS_fuse_devfs.h>
 #include <H2F_LW.h>
 #include <H2F.h>
 
-////////////////////////////////////////////////////////////////////////////////
+#define MAX_PATH_LEN 1024
 
 typedef struct {
-  baub_port_fifo_desc_t* h2flw;
-  baub_port_fifo_desc_t* h2f;
-  baub_port_fifo_desc_t* f2h;
-} sim_ports_t;
+  char simports_path[MAX_PATH_LEN];
+  char workdir_path[MAX_PATH_LEN];
+} setup_ctxt_t;
 
 #define EXPOSE_SIMPORTS() ((sim_ports_t*) fuse_get_context()->private_data)
+
+////////////////////////////////////////////////////////////////////////////////
 
 static void* _init (struct fuse_conn_info* conn, struct fuse_config* cfg) {
   printf ("cheri-bgas-fuse-devfs -- init\n");
   // private data initially set to path to simulator ports folder
-  const char* portsPath = (char*) fuse_get_context()->private_data;
+  setup_ctxt_t* pctxt = (setup_ctxt_t*) fuse_get_context()->private_data;
+  // prepare simulation ports
   sim_ports_t* simports = (sim_ports_t*) malloc (sizeof (sim_ports_t));
   // H2F LW interface
-  simports->h2flw = h2f_lw_init (portsPath);
+  char h2flw_log_path[MAX_PATH_LEN];
+  sprintf (h2flw_log_path, "%s/%s", pctxt->workdir_path, "h2flw.log");
+  simports->h2flw = h2f_lw_init (pctxt->simports_path, h2flw_log_path);
   // H2F interface
-  simports->h2f   = h2f_init (portsPath);
+  char h2f_log_path[MAX_PATH_LEN];
+  sprintf (h2f_log_path, "%s/%s", pctxt->workdir_path, "h2f.log");
+  simports->h2f = h2f_init (pctxt->simports_path, h2f_log_path);
   // F2H interface TODO
-  simports->f2h   = NULL;
+  simports->f2h = NULL;
   // return simulator ports
   return (void*) simports;
 }
@@ -82,9 +87,9 @@ static void* _init (struct fuse_conn_info* conn, struct fuse_config* cfg) {
 static void _destroy (void* private_data) {
   printf ("cheri-bgas-fuse-devfs -- destroy\n");
   sim_ports_t* simports = EXPOSE_SIMPORTS();
-  baub_fifo_Close (simports->h2f);
-  baub_fifo_Close (simports->h2flw);
-  baub_fifo_Close (simports->h2f);
+  //TODO f2h_destroy (simports->f2h);
+  h2f_destroy (simports->h2f);
+  h2f_lw_destroy (simports->h2flw);
   free (simports);
   //free (ctxt);
 }
@@ -97,7 +102,7 @@ static int _getattr ( const char* path
   st->st_gid = getgid ();
   st->st_atime = time (NULL);
   st->st_mtime = time (NULL);
-  sim_ports_t* simports = EXPOSE_SIMPORTS();
+  //sim_ports_t* simports = EXPOSE_SIMPORTS();
   if (strcmp (path, "/") == 0) {
     st->st_mode = S_IFDIR | 0755;
     st->st_nlink = 2;
@@ -158,12 +163,12 @@ static int _ioctl ( const char* path
   t_axi4_bflit*  (*b_create_flit)  (const uint8_t* raw_flit) = NULL;
   t_axi4_arflit* (*ar_create_flit) (const uint8_t* raw_flit) = NULL;
   t_axi4_rflit*  (*r_create_flit)  (const uint8_t* raw_flit) = NULL;
-  void (*aw_print_flit) (const t_axi4_awflit* flit) = NULL;
-  void (*w_print_flit)  (const t_axi4_wflit* flit)  = NULL;
-  void (*b_print_flit)  (const t_axi4_bflit* flit)  = NULL;
-  void (*ar_print_flit) (const t_axi4_arflit* flit) = NULL;
-  void (*r_print_flit)  (const t_axi4_rflit* flit)  = NULL;
-  baub_port_fifo_desc_t* simport = NULL;
+  void (*aw_fprint_flit) (FILE* f, const t_axi4_awflit* flit) = NULL;
+  void (*w_fprint_flit)  (FILE* f, const t_axi4_wflit* flit)  = NULL;
+  void (*b_fprint_flit)  (FILE* f, const t_axi4_bflit* flit)  = NULL;
+  void (*ar_fprint_flit) (FILE* f, const t_axi4_arflit* flit) = NULL;
+  void (*r_fprint_flit)  (FILE* f, const t_axi4_rflit* flit)  = NULL;
+  axi_sim_port_t* simport = NULL;
   uint64_t offset_mask = (~0 << (int) log2 (fmemReq->access_width));
   if ((dev = devs_find (path, h2f_lw_devs, n_h2f_lw_devs))) {
     aw_create_flit = &H2F_LW_AW_(create_flit);
@@ -171,11 +176,11 @@ static int _ioctl ( const char* path
     b_create_flit  = &H2F_LW_B_(create_flit);
     ar_create_flit = &H2F_LW_AR_(create_flit);
     r_create_flit  = &H2F_LW_R_(create_flit);
-    aw_print_flit = &H2F_LW_AW_(print_flit);
-    w_print_flit  = &H2F_LW_W_(print_flit);
-    b_print_flit  = &H2F_LW_B_(print_flit);
-    ar_print_flit = &H2F_LW_AR_(print_flit);
-    r_print_flit  = &H2F_LW_R_(print_flit);
+    aw_fprint_flit = &H2F_LW_AW_(fprint_flit);
+    w_fprint_flit  = &H2F_LW_W_(fprint_flit);
+    b_fprint_flit  = &H2F_LW_B_(fprint_flit);
+    ar_fprint_flit = &H2F_LW_AR_(fprint_flit);
+    r_fprint_flit  = &H2F_LW_R_(fprint_flit);
     simport = simports->h2flw;
     offset_mask &= 0x3;
   }
@@ -185,11 +190,11 @@ static int _ioctl ( const char* path
     b_create_flit  = &H2F_B_(create_flit);
     ar_create_flit = &H2F_AR_(create_flit);
     r_create_flit  = &H2F_R_(create_flit);
-    aw_print_flit = &H2F_AW_(print_flit);
-    w_print_flit  = &H2F_W_(print_flit);
-    b_print_flit  = &H2F_B_(print_flit);
-    ar_print_flit = &H2F_AR_(print_flit);
-    r_print_flit  = &H2F_R_(print_flit);
+    aw_fprint_flit = &H2F_AW_(fprint_flit);
+    w_fprint_flit  = &H2F_W_(fprint_flit);
+    b_fprint_flit  = &H2F_B_(fprint_flit);
+    ar_fprint_flit = &H2F_AR_(fprint_flit);
+    r_fprint_flit  = &H2F_R_(fprint_flit);
     simport = simports->h2f;
     offset_mask &= 0xf;
   } else return ERANGE;
@@ -229,14 +234,14 @@ static int _ioctl ( const char* path
       /*TODO*/ arflit->arqos = 0;
       /*TODO*/ arflit->arregion = 0;
       arflit->aruser[0] = 0;
-      ar_print_flit (arflit);
-      printf ("\n");
-      bub_fifo_ProduceElement (simport->ar, (void*) arflit);
+      bub_fifo_ProduceElement (simport->fifo->ar, (void*) arflit);
+      ar_fprint_flit (simport->logfile, arflit);
+      fprintf (simport->logfile, "\n");
       // get an AXI4 read response R flit
       t_axi4_rflit* rflit = r_create_flit (NULL);
-      bub_fifo_ConsumeElement (simport->r, (void*) rflit);
-      r_print_flit (rflit);
-      printf ("\n");
+      bub_fifo_ConsumeElement (simport->fifo->r, (void*) rflit);
+      r_fprint_flit (simport->logfile, rflit);
+      fprintf (simport->logfile, "\n");
       // return the response data through the fmem request pointer
       // TODO check rflit->rresp
       for (int i = 0; i < fmemReq->access_width; i++)
@@ -260,9 +265,11 @@ static int _ioctl ( const char* path
       /*TODO*/ awflit->awqos = 0;
       /*TODO*/ awflit->awregion = 0;
       awflit->awuser[0];
-      aw_print_flit (awflit);
-      printf ("\n");
-      bub_fifo_ProduceElement (simport->aw, (void*) awflit);
+      /**/printf ("fmem write ioctl -- pre log\n");
+      aw_fprint_flit (simport->logfile, awflit);
+      fprintf (simport->logfile, "\n");
+      /**/printf ("fmem write ioctl -- post log\n");
+      bub_fifo_ProduceElement (simport->fifo->aw, (void*) awflit);
       // send an AXI4 write request W flit
       t_axi4_wflit* wflit = w_create_flit (NULL);
       for (int i = 0; i < 4; i++)
@@ -270,13 +277,15 @@ static int _ioctl ( const char* path
       wflit->wstrb[0] = strb;
       wflit->wlast = 0b00000001;
       wflit->wuser[0] = 0;
-      w_print_flit (wflit);
+      w_fprint_flit (simport->logfile, wflit);
+      fprintf (simport->logfile, "\n");
       printf ("\n");
-      bub_fifo_ProduceElement (simport->w, (void*) wflit);
+      bub_fifo_ProduceElement (simport->fifo->w, (void*) wflit);
       // get an AXI4 write response B flit
       t_axi4_bflit* bflit = b_create_flit (NULL);
-      bub_fifo_ConsumeElement (simport->b, (void*) bflit);
-      b_print_flit (bflit);
+      bub_fifo_ConsumeElement (simport->fifo->b, (void*) bflit);
+      b_fprint_flit (simport->logfile, bflit);
+      fprintf (simport->logfile, "\n");
       printf ("\n");
       // TODO check bflit->bresp
       return 0;
@@ -290,15 +299,24 @@ static int _ioctl ( const char* path
 
 int main (int argc, char** argv)
 {
+  // prepate an initial constect to call the fuse_main with
+  setup_ctxt_t ctxt;
+
   // grab the path to the simulator's ports folder from the  command line args
   if ((argc < 3) || (argv[1][0] == '-')) {
     printf ("%s PATH_TO_SIMULATOR_PORTS <standard fuse flags>\n", argv[0]);
     return -1;
   }
   char* simports_dir = realpath (argv[1], NULL);
+  strcpy (ctxt.simports_path, simports_dir);
+  free (simports_dir);
   argv[1] = argv[0];
   argv = &(argv[1]);
   argc--;
+
+  // remember the current working directory
+  char current_workdir_path[MAX_PATH_LEN];
+  getcwd(ctxt.workdir_path, MAX_PATH_LEN);
 
   // gather the various fuse operations
   static struct fuse_operations ops = {
@@ -312,6 +330,6 @@ int main (int argc, char** argv)
 
   printf ("cheri-bgas-fuse-devfs -- fuse_main\n");
 
-  // call fuse main, private data context set to the simulator ports folder
-  return fuse_main (argc, argv, &ops, simports_dir);
+  // call fuse main, with initial private data context set
+  return fuse_main (argc, argv, &ops, &ctxt);
 }
