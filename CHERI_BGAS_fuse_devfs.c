@@ -242,6 +242,7 @@ static int _ioctl ( const char* path
       bub_fifo_ConsumeElement (simport->fifo->r, (void*) rflit);
       r_fprint_flit (simport->logfile, rflit);
       fprintf (simport->logfile, "\n");
+      fflush (simport->logfile);
       // return the response data through the fmem request pointer
       // TODO check rflit->rresp
       for (int i = 0; i < fmemReq->access_width; i++)
@@ -279,14 +280,13 @@ static int _ioctl ( const char* path
       wflit->wuser[0] = 0;
       w_fprint_flit (simport->logfile, wflit);
       fprintf (simport->logfile, "\n");
-      printf ("\n");
       bub_fifo_ProduceElement (simport->fifo->w, (void*) wflit);
       // get an AXI4 write response B flit
       t_axi4_bflit* bflit = b_create_flit (NULL);
       bub_fifo_ConsumeElement (simport->fifo->b, (void*) bflit);
       b_fprint_flit (simport->logfile, bflit);
       fprintf (simport->logfile, "\n");
-      printf ("\n");
+      fflush (simport->logfile);
       // TODO check bflit->bresp
       return 0;
       break;
