@@ -1,0 +1,5 @@
+# cheri-bgas-fuse-devfs
+
+`cheri-bgas-fuse-devfs` is a tool to present `fmem` files for the devices exposed by a CHERI-BGAS simulator.
+When a CHERI-BGAS simulator is running, it exposes internal devices through some unix fifos created in a `PATH_TO_SIMULATOR_PORTS` folder.
+Running `cheri-bgas-fuse-devfs/cheri-bgas-fuse-devfs PATH_TO_SIMULATOR_PORTS PATH_TO_DEVFS` will create a `PATH_TO_DEVFS` folder with an `fmem` file representing each of the exposed devices.
