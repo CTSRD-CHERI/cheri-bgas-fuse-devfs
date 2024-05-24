@@ -1,0 +1,4 @@
+# Ignore generated object files
+obj
+# Ignore generated executable
+cheri-bgas-fuse-devfs
