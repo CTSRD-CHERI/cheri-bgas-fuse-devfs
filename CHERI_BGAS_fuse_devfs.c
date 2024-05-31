@@ -1,6 +1,7 @@
 /*-
 * SPDX-License-Identifier: BSD-2-Clause
 *
+* Copyright (c) 2024 Samuel W Stark <sws35@cam.ac.uk>
 * Copyright (c) 2022-2023 Alexandre Joannou <aj443@cam.ac.uk>
 * Copyright (c) 2021 Ruslan Bukin <br@bsdpad.com>
 * Copyright (c) 2022 Jon Woodruff <Jonathan.Woodruff@cl.cam.ac.uk>
@@ -170,6 +171,7 @@ static int _ioctl ( const char* path
   void (*r_fprint_flit)  (FILE* f, const t_axi4_rflit* flit)  = NULL;
   axi_sim_port_t* simport = NULL;
   uint64_t offset_mask = (~0 << (int) log2 (fmemReq->access_width));
+  int data_width_bytes = 0;
   if ((dev = devs_find (path, h2f_lw_devs, n_h2f_lw_devs))) {
     aw_create_flit = &H2F_LW_AW_(create_flit);
     w_create_flit  = &H2F_LW_W_(create_flit);
@@ -183,6 +185,7 @@ static int _ioctl ( const char* path
     r_fprint_flit  = &H2F_LW_R_(fprint_flit);
     simport = simports->h2flw;
     offset_mask &= 0x3;
+    data_width_bytes = 4;
   }
   else if ((dev = devs_find (path, h2f_devs, n_h2f_devs))) {
     aw_create_flit = &H2F_AW_(create_flit);
@@ -197,22 +200,32 @@ static int _ioctl ( const char* path
     r_fprint_flit  = &H2F_R_(fprint_flit);
     simport = simports->h2f;
     offset_mask &= 0xf;
+    data_width_bytes = 16;
   } else return ERANGE;
 
   // compute address and check for in range accesses
   printf ("found device \"%s\"\n", dev->name);
   uint64_t addr = 0xffffffff & (fmemReq->offset + dev->base_addr);
   uint64_t range = 0xffffffff & dev->range;
+  // Each AXI flit represents an access within an N-byte aligned region
+  // e.g. for h2flw the data width is 4 bytes => each flit represents an access within a 4-byte aligned region.
+  // If the address isn't N-byte aligned, there is effectively an offset from the start of the region.
+  // That is what flit_offset represents.
+  // the write-data and read-data send and received in flits are for the aligned region, so flit_offset marks where to start taking data from those buffers.
   uint64_t flit_offset = addr & offset_mask;
   if (fmemReq->offset + fmemReq->access_width > range) return ERANGE;
 
   // prepare AXI4 access size and byte strobe
   uint8_t size = 0;
-  uint8_t strb = 0;
+  // strb is a byte-select passed in the flit
+  // The first set bit in strb must enable a byte greater than or equal to the one addressed by addr.
+  // e.g. if using 4-byte aligned regions, and addr = 2, bits 0 and 1 of strb must always be 0, and bits 2 and 3 may be 0 or 1.
+  // max data_width_bytes = 16bytes, strb is a byte select => 16-bits wide
+  uint16_t strb = 0;
   switch(fmemReq->access_width) {
-    case 1: size = 0; strb = 0b00000001 << flit_offset; break;
-    case 2: size = 1; strb = 0b00000011 << flit_offset; break;
-    case 4: size = 2; strb = 0b00001111 << flit_offset; break;
+    case 1: size = 0; strb = 0x0001 << flit_offset; break;
+    case 2: size = 1; strb = 0x0003 << flit_offset; break;
+    case 4: size = 2; strb = 0x000f << flit_offset; break;
     default: return -1;
   }
 
@@ -275,13 +288,19 @@ static int _ioctl ( const char* path
       t_axi4_wflit* wflit = w_create_flit (NULL);
       for (int i = 0; i < 4; i++)
         wflit->wdata[flit_offset + i] = ((uint8_t*) &fmemReq->data)[i];
-      wflit->wstrb[0] = strb;
+      wflit->wstrb[0] = strb & 0xFF;
+      // If data_width_bytes > 8 then there is a second byte of wstrb that we need to set
+      if (data_width_bytes > 8) {
+        wflit->wstrb[1] = (strb >> 8) & 0xFF;
+      }
       wflit->wlast = 0b00000001;
       wflit->wuser[0] = 0;
       w_fprint_flit (simport->logfile, wflit);
       fprintf (simport->logfile, "\n");
       bub_fifo_ProduceElement (simport->fifo->w, (void*) wflit);
       // get an AXI4 write response B flit
+      // in case the sent flits never respond, flush the log
+      fflush (simport->logfile);
       t_axi4_bflit* bflit = b_create_flit (NULL);
       bub_fifo_ConsumeElement (simport->fifo->b, (void*) bflit);
       b_fprint_flit (simport->logfile, bflit);
