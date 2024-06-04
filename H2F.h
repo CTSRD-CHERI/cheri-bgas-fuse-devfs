@@ -49,13 +49,12 @@
 // H2F devices
 ////////////////////////////////////////////////////////////////////////////////
 
+// CHERI_BGAS_System exposes a 32-address-bit t_h2f_sub AXI slave port,
+// and we expose the full 32-bit range as one device.
 static const mem_mapped_dev_t h2f_devs[] =
-{ { .name      = "ddr_uncached"
-  , .base_addr = 0x80000000
+{ { .name      = "dma_window"
+  , .base_addr = 0x00000000
   , .range     = 0x40000000 },
-  { .name      = "ddr_cached"
-  , .base_addr = 0xC0000000
-  , .range     = 0x40000000 }
 };
 int n_h2f_devs = sizeof(h2f_devs)/sizeof(mem_mapped_dev_t);
 
