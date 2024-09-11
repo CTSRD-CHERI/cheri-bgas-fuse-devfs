@@ -73,7 +73,19 @@ static const mem_mapped_dev_t h2f_lw_devs[] =
   , .range     = 0x00001000 },
   { .name      = "virtual_device"
   , .base_addr = 0x00008000
-  , .range     = 0x00004000 }
+  , .range     = 0x00004000 },
+  { .name      = "bert_a"
+  , .base_addr = 0x00140000
+  , .range     = 0x00000100 },
+  { .name      = "bert_b"
+  , .base_addr = 0x00141000
+  , .range     = 0x00000100 },
+  { .name      = "bert_c"
+  , .base_addr = 0x00142000
+  , .range     = 0x00000100 },
+  { .name      = "bert_d"
+  , .base_addr = 0x00143000
+  , .range     = 0x00000100 }
 };
 int n_h2f_lw_devs = sizeof(h2f_lw_devs)/sizeof(mem_mapped_dev_t);
 
